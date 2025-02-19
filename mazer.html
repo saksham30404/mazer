@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mazer Ultimate - AI Music Studio</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            /* Base Pastel Theme Colors - Plain UI */
+            --pastel-bg: #f0f8ff;          /* Light Cyan Background */
+            --pastel-text: #444;          /* Dark Gray Text */
+            --pastel-panel-bg: #ffffff;      /* White Panel Background */
+            --pastel-subtle-highlight: #e8f4ff; /* Very Light Blue Highlight */
+            --pastel-hover-glow: rgba(0, 0, 0, 0.07);
+            --pastel-active-glow-base: rgba(144, 238, 144, 0.4); /* Base active glow color */
+            --pastel-active-glow: var(--pastel-active-glow-base); /* Active glow - can be dynamically changed */
+
+            /* Pastel Instrument Colors (Reusing Pastel Shades) */
+            --instrument-piano: #b0e0e6; /* Powder Blue */
+            --instrument-drums: #ffb6c1; /* Light Pink */
+            --instrument-synth: #90ee90; /* Light Green */
+            --instrument-guitar: #ffffb3; /* Pale Yellow */
+        }
+
+        body {
+            margin: 0;
+            background: var(--pastel-bg);
+            color: var(--pastel-text);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 280px;
+            width: 95%;
+            max-width: 1400px;
+            height: 90vh;
+            max-height: 900px;
+            gap: 15px;
+            padding: 20px;
+            box-sizing: border-box;
+            border-radius: 15px;
+            background: var(--pastel-bg); /* Match container bg with body */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            margin: 20px auto; /* Center the container horizontally */
+            position: relative; /* For relative positioning of title */
+        }
+
+        /* Panel Styling - Plain Pastel UI (No changes needed from last version) */
+        .control-panel, .social-panel {
+            padding: 25px;
+            background: var(--pastel-panel-bg);
+            border-radius: 12px;
+            transition: box-shadow 0.3s;
+            overflow-y: auto;
+            height: calc(100% - 50px);
+            box-sizing: border-box;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border: none;
+        }
+
+        .control-panel:hover, .social-panel:hover {
+            box-shadow: 0 8px 20px var(--pastel-hover-glow);
+        }
+
+        .visualization-container {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background: var(--pastel-panel-bg);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border: none;
+        }
+
+        #threeCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* ** Animated Title Text ** - Corrected CSS for Logo Placement */
+        h1#main-title {
+            font-size: 2.7em; /* Slightly larger title */
+            text-align: center;
+            margin-bottom: 10px; /* Reduced bottom margin */
+            position: absolute;
+            top: -10px; /* Positioned slightly above main-container */
+            left: 50%;
+            transform: translateX(-50%);
+            letter-spacing: 0.05em;
+            font-weight: bold;
+            color: var(--pastel-text);
+            text-shadow: 1px 1px 0 rgba(0,0,0,0.03);
+            animation: colorShift 20s infinite alternate ease-in-out,
+                       textSlide 25s infinite alternate ease-in-out;
+            white-space: nowrap; /* Prevent text from wrapping */
+        }
+
+
+        @keyframes colorShift {
+            0%, 100% { color: var(--pastel-text); }
+            25%      { color: var(--instrument-piano); }
+            50%      { color: var(--instrument-synth); }
+            75%      { color: var(--instrument-guitar); }
+        }
+
+        @keyframes textSlide {
+            0%, 100% { transform: translateX(-50%) translateY(0px); }
+            50%      { transform: translateX(calc(-50% + 5px)) translateY(-2px); }
+        }
+
+        h2 {
+            color: var(--pastel-text);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-weight: normal;
+            letter-spacing: 0.03em;
+        }
+
+        h3 {
+            color: var(--pastel-text);
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            font-weight: normal;
+            letter-spacing: 0.02em;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--pastel-subtle-highlight);
+            margin: 20px 0;
+        }
+
+        /* Matrix, MIDI, Instrument Selector, Controls, Buttons - No CSS changes from previous good version */
+        .matrix-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 5px; margin: 15px 0; }
+        .matrix-cell { background: var(--pastel-subtle-highlight); aspect-ratio: 1; border-radius: 8px; transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s; cursor: pointer; user-select: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); border: none; }
+        .matrix-cell:hover { background: var(--pastel-panel-bg); transform: scale(1.1); box-shadow: 0 6px 12px var(--pastel-hover-glow); }
+        .matrix-cell.active { background: var(--pastel-active-glow); box-shadow: 0 0 10px var(--pastel-active-glow), 0 0 0 2px var(--pastel-panel-bg); transform: scale(1.1); }
+        .matrix-cell.instrument-piano { background-color: var(--instrument-piano); }
+        .matrix-cell.instrument-drums { background-color: var(--instrument-drums); }
+        .matrix-cell.instrument-synth { background-color: var(--instrument-synth); }
+        .matrix-cell.instrument-guitar { background-color: var(--instrument-guitar); }
+
+        .midi-keyboard { display: flex; gap: 5px; margin: 15px 0; }
+        .midi-key { background: var(--pastel-panel-bg); height: 90px; flex: 1; border-radius: 10px; cursor: pointer; transition: background-color 0.2s, box-shadow 0.2s; user-select: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05); border: none; }
+        .midi-key:hover { background: var(--pastel-subtle-highlight); box-shadow: 0 6px 12px var(--pastel-hover-glow); }
+        .midi-key.active { background: var(--pastel-active-glow); box-shadow: 0 0 10px var(--pastel-active-glow), 0 0 0 2px var(--pastel-panel-bg); }
+        .midi-key.instrument-piano { background-color: var(--instrument-piano); }
+        .midi-key.instrument-drums { background-color: var(--instrument-drums); }
+        .midi-key.instrument-synth { background-color: var(--instrument-synth); }
+        .midi-key.instrument-guitar { background-color: var(--instrument-guitar); }
+
+        .instrument-selector { display: flex; justify-content: space-around; margin: 15px 0; }
+        .instrument-btn { background: var(--pastel-panel-bg); padding: 12px 20px; border-radius: 10px; cursor: pointer; transition: background-color 0.3s, transform 0.3s, box-shadow 0.3s; color: var(--pastel-text); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05); border: none; }
+        .instrument-btn:hover { background: var(--pastel-subtle-highlight); color: var(--pastel-text); box-shadow: 0 8px 16px var(--pastel-hover-glow); transform: scale(1.05); }
+        .instrument-btn.active { background: var(--pastel-active-glow); box-shadow: 0 0 8px var(--pastel-active-glow), 0 0 0 2px var(--pastel-panel-bg); }
+        .instrument-btn.instrument-piano.active { color: var(--pastel-text); background-color: var(--instrument-piano); }
+        .instrument-btn.instrument-drums.active { color: var(--pastel-text); background-color: var(--instrument-drums); }
+        .instrument-btn.instrument-synth.active { color: var(--pastel-text); background-color: var(--instrument-synth); }
+        .instrument-btn.instrument-guitar.active { color: var(--pastel-text); background-color: var(--instrument-guitar); }
+
+        .control-group { margin-bottom: 20px; }
+        .control-label { display: block; margin-bottom: 8px; font-size: 0.95em; color: var(--pastel-text); opacity: 0.7; }
+        input[type="range"] { width: 100%; -webkit-appearance: none; height: 8px; background: var(--pastel-subtle-highlight); border-radius: 4px; outline: none; transition: background-color 0.2s; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--pastel-panel-bg); cursor: pointer; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); transition: background-color 0.2s, transform 0.2s; }
+        input[type="range"]::-webkit-slider-thumb:hover { background: var(--pastel-subtle-highlight); transform: scale(1.1); }
+        input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--pastel-panel-bg); cursor: pointer; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); transition: background-color 0.2s, transform 0.2s; }
+        input[type="range"]::-moz-range-thumb:hover { background: var(--pastel-subtle-highlight); transform: scale(1.1); }
+
+        .preset-btn { background: var(--pastel-panel-bg); padding: 12px 20px; margin: 10px 0; border-radius: 10px; cursor: pointer; transition: background-color 0.3s, transform 0.3s, box-shadow 0.3s; color: var(--pastel-text); text-align: center; display: block; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05); border: none; }
+        .preset-btn:hover { background: var(--pastel-subtle-highlight); color: var(--pastel-text); box-shadow: 0 8px 16px var(--pastel-hover-glow); transform: scale(1.03); }
+
+
+        /* Responsive Handling (no changes) */
+        @media (max-width: 900px) {
+            .main-container { grid-template-columns: 1fr; height: auto; margin-top: 20px; padding: 15px; border-radius: 10px; }
+            .control-panel, .social-panel { display: block; height: auto; margin-bottom: 15px; }
+            .visualization-container { margin-bottom: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1 id="main-title">Mazer Ultimate</h1>
+
+    <div class="main-container">
+        <div class="control-panel">
+            <h2>AI PARAMETERS</h2>
+
+            <h3>Select Instrument</h3>
+            <div class="instrument-selector">
+                <div class="instrument-btn instrument-btn-piano" onclick="selectInstrument('piano')">🎹 Piano</div>
+                <div class="instrument-btn instrument-btn-drums" onclick="selectInstrument('drums')">🥁 Drums</div>
+                <div class="instrument-btn instrument-btn-synth" onclick="selectInstrument('synth')">🎛 Synth</div>
+                <div class="instrument-btn instrument-btn-guitar" onclick="selectInstrument('guitar')">🎸 Guitar</div>
+            </div>
+
+            <div class="control-group">
+                <label for="tempoSlider" class="control-label">Tempo</label>
+                <input type="range" id="tempoSlider" min="60" max="200" value="120">
+            </div>
+
+            <div class="control-group">
+                <label for="volumeSlider" class="control-label">Volume</label>
+                <input type="range" id="volumeSlider" min="0" max="1" value="0.5" step="0.01">
+            </div>
+
+            <h3>Pattern Matrix</h3>
+            <div class="matrix-grid" id="drumMatrix"></div>
+
+            <h3>MIDI Controller</h3>
+            <div class="midi-keyboard" id="midiKeyboard"></div>
+
+            <button class="preset-btn" onclick="autoGenerateTune()">Auto-Generate Tune</button>
+            <button class="preset-btn" onclick="clearMatrix()">Clear Matrix</button>
+            <button class="preset-btn" onclick="triggerRecording()">Record / Play</button>
+
+            <div class="preset-bank">
+                <h3>Preset Banks</h3>
+                <button class="preset-btn" onclick="loadPreset('preset1')">Preset 1</button>
+                <button class="preset-btn" onclick="loadPreset('preset2')">Preset 2</button>
+                <button class="preset-btn" onclick="loadPreset('preset3')">Preset 3</button>
+                <button class="preset-btn" onclick="saveProject()">Save Project</button>
+                <button class="preset-btn" onclick="loadProject()">Load Project</button>
+                <button class="preset-btn" onclick="callAIGenerateTune()">Generate AI Tune (Placeholder)</button>
+            </div>
+
+        </div>
+
+        <div class="visualization-container">
+            <canvas id="threeCanvas"></canvas>
+        </div>
+
+        <div class="social-panel">
+            <h2>TRENDING NOW</h2>
+            <div id="trendingPatterns">
+                <div>🔥 Hyperpop Riff - Pop (1.2M users)</div>
+                <div>🎵 Neuro Bass - DnB (890K users)</div>
+            </div>
+            <hr>
+            <h3>Share Your Track</h3>
+            <div class="social-buttons">
+                <button class="preset-btn" onclick="shareToTwitter()">Twitter</button>
+                <button class="preset-btn" onclick="shareToInstagram()">Instagram</button>
+                <button class="preset-btn" onclick="shareToFacebook()">Facebook</button>
+                <button class="preset-btn" onclick="shareToClipboard()">Copy Link</button>
+            </div>
+        </div>
+    </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+<script>
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+let selectedInstrument = 'piano';
+let tempo = 120;
+let volume = 0.5;
+let matrixCells = [];
+let midiKeys = [];
+let isRecording = false;
+let recordedSequence = [];
+let playInterval;
+let scene, camera, renderer, cube;
+
+// -------------------- Mood-Based UI Change Implementation --------------------
+function updateUIForMood() {
+    const tempoRatio = tempo / 120; // Ratio relative to default tempo 120
+    const animationSpeedMultiplier = tempoRatio; // Directly proportional speed
+    const glowIntensityMultiplier = Math.min(tempoRatio, 1.5); // Limit max glow intensity
+
+    // Dynamically adjust title animation speed
+    const colorShiftDuration = 20 / animationSpeedMultiplier; // Faster tempo, faster shift
+    const textSlideDuration = 25 / animationSpeedMultiplier;
+
+    document.querySelector(':root').style.setProperty('--animation-color-shift-duration', `${colorShiftDuration}s`);
+    document.querySelector(':root').style.setProperty('--animation-text-slide-duration', `${textSlideDuration}s`);
+
+    // Reapply animations to title (restart them with new durations)
+    const mainTitle = document.getElementById('main-title');
+    mainTitle.style.animation = `colorShift ${colorShiftDuration}s infinite alternate ease-in-out, textSlide ${textSlideDuration}s infinite alternate ease-in-out`;
+
+
+    // Dynamically adjust active glow intensity (example - make it brighter with faster tempo)
+    const activeGlowColor = `rgba(144, 238, 144, ${0.4 * glowIntensityMultiplier})`; // Adjust base alpha * multiplier
+    document.querySelector(':root').style.setProperty('--pastel-active-glow', activeGlowColor);
+}
+
+
+// Re-define animations in CSS to use variables for duration (needed for dynamic update)
+const styleSheet = document.createElement('style');
+styleSheet.textContent = `
+    @keyframes colorShift {
+        0%, 100% { color: var(--pastel-text); }
+        25%      { color: var(--instrument-piano); }
+        50%      { color: var(--instrument-synth); }
+        75%      { color: var(--instrument-guitar); }
+    }
+
+    @keyframes textSlide {
+        0%, 100% { transform: translateX(-50%) translateY(0px); }
+        50%      { transform: translateX(calc(-50% + 5px)) translateY(-2px); }
+    }
+
+    h1#main-title {
+        animation: colorShift var(--animation-color-shift-duration, 20s) infinite alternate ease-in-out,
+                   textSlide var(--animation-text-slide-duration, 25s) infinite alternate ease-in-out;
+    }
+`;
+document.head.appendChild(styleSheet);
+
+
+// -------------------- Sound Engine, UI Interaction, Matrix/MIDI, Visual Feedback, Sequencing, Presets, Social, Project Load/Save, AI, Visualizer, Initialization (JS - mostly unchanged) --------------------
+// ... (Paste all Javascript code from the previous version, EXCEPT for initVisualizer and animateCubeToPattern which are updated below for visualizer mood link) ...
+
+// -------------------- Sound Engine --------------------
+
+// Instrument Sound Mapping (Simple waveforms for now)
+const instrumentSounds = {
+    piano: { type: 'triangle', baseFrequency: 261.63 }, // Middle C
+    drums: { type: 'square', baseFrequency: 130.81 },  // C3
+    synth: { type: 'sawtooth', baseFrequency: 440.00 }, // A4
+    guitar: { type: 'sine', baseFrequency: 196.00 }    // G3
+};
+
+// Function to play sound with instrument characteristics
+function playSound(frequency) {
+    const instrument = instrumentSounds[selectedInstrument];
+    const osc = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    osc.type = instrument.type;
+    osc.frequency.setValueAtTime(frequency || instrument.baseFrequency, audioContext.currentTime);
+
+    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
+
+    osc.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    osc.start();
+    osc.stop(audioContext.currentTime + 0.1);
+}
+
+// -------------------- UI Interaction --------------------
+
+function selectInstrument(instrument) {
+    selectedInstrument = instrument;
+    console.log(`Instrument selected: ${instrument}`);
+
+    document.querySelectorAll('.instrument-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.instrument-btn-${instrument}`).classList.add('active');
+
+    matrixCells.forEach(cell => {
+        cell.className = 'matrix-cell';
+        if (cell.classList.contains('active')) {
+             cell.classList.add('active');
+        }
+        cell.classList.add(`instrument-${instrument}`);
+    });
+     midiKeys.forEach(key => {
+        key.className = 'midi-key';
+        key.classList.add(`instrument-${instrument}`);
+        if (key.classList.contains('active')) {
+             key.classList.add('active');
+        }
+    });
+}
+
+const tempoSlider = document.getElementById('tempoSlider');
+const volumeSlider = document.getElementById('volumeSlider');
+
+tempoSlider.addEventListener('input', () => {
+    tempo = parseInt(tempoSlider.value);
+    console.log(`Tempo changed to: ${tempo} BPM`);
+    updateUIForMood(); // Call mood update on tempo change
+    if (isRecording) {
+        clearInterval(playInterval);
+        startPlayback();
+    }
+});
+
+volumeSlider.addEventListener('input', () => {
+    volume = parseFloat(volumeSlider.value);
+    console.log(`Volume changed to: ${volume}`);
+});
+
+// -------------------- Matrix and MIDI Keyboard --------------------
+
+function createMatrix() {
+    const matrix = document.getElementById('drumMatrix');
+    for (let i = 0; i < 128; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'matrix-cell instrument-piano';
+        cell.dataset.index = i;
+        cell.addEventListener('click', () => {
+            toggleMatrixCell(cell);
+        });
+        matrix.appendChild(cell);
+        matrixCells.push(cell);
+    }
+}
+
+function toggleMatrixCell(cell) {
+    cell.classList.toggle('active');
+    playSound();
+    if (isRecording) {
+        recordNote(cell.dataset.index, cell.classList.contains('active'));
+    }
+    matrixVisualFeedback(cell);
+}
+
+function createMIDIKeyboard() {
+    const keyboard = document.getElementById('midiKeyboard');
+    const noteFrequencies = [261.63, 277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392.00, 415.30, 440.00, 466.16, 493.88];
+    for (let i = 0; i < 12; i++) {
+        const key = document.createElement('div');
+        key.className = 'midi-key instrument-piano';
+        key.dataset.noteIndex = i;
+        key.addEventListener('click', () => {
+            playMIDINote(key, noteFrequencies[i]);
+        });
+        keyboard.appendChild(key);
+        midiKeys.push(key);
+    }
+}
+
+function playMIDINote(key, frequency) {
+    playSound(frequency);
+    keyVisualFeedback(key);
+    if (isRecording) {
+        recordNote(key.dataset.noteIndex, true, 'midi');
+    }
+}
+
+// -------------------- Visual Feedback --------------------
+function matrixVisualFeedback(cell) {
+    cell.classList.add('active');
+    setTimeout(() => {
+        if (!cell.classList.contains('midi-key-active')) {
+             cell.classList.remove('active');
+        }
+    }, 200);
+}
+
+function keyVisualFeedback(key) {
+    key.classList.add('active');
+    key.classList.add('midi-key-active');
+    setTimeout(() => {
+        key.classList.remove('active');
+        key.classList.remove('midi-key-active');
+    }, 200);
+}
+
+// -------------------- Sequencing and Recording --------------------
+function autoGenerateTune() {
+    clearMatrix();
+
+    matrixCells.forEach(cell => {
+        if (Math.random() > 0.25) {
+            toggleMatrixCell(cell);
+        }
+    });
+    animateCubeToPattern();
+}
+
+function clearMatrix() {
+    matrixCells.forEach(cell => {
+        cell.classList.remove('active');
+    });
+    recordedSequence = [];
+}
+
+function triggerRecording() {
+    isRecording = !isRecording;
+    recordedSequence = [];
+    if (isRecording) {
+        startRecording();
+    } else {
+        stopRecording();
+        startPlayback();
+    }
+}
+
+function startRecording() {
+    console.log("Recording started!");
+    recordedSequence = [];
+}
+
+function stopRecording() {
+    console.log("Recording stopped!");
+}
+
+function recordNote(index, isActive, type = 'matrix') {
+    if (isRecording) {
+        recordedSequence.push({
+            time: audioContext.currentTime,
+            index: index,
+            active: isActive,
+            instrument: selectedInstrument,
+            noteType: type
+        });
+    }
+}
+
+function startPlayback() {
+    if (recordedSequence.length === 0) {
+        console.warn("No recorded sequence to play.");
+        return;
+    }
+
+    let startTime = audioContext.currentTime;
+    let beatDuration = 60 / tempo;
+    let timeOffset = 0;
+
+    playInterval = setInterval(() => {
+        let scheduledTime = startTime + timeOffset;
+
+        recordedSequence.forEach(event => {
+            if (event.time >= timeOffset && event.time < timeOffset + beatDuration) {
+                scheduleNotePlayback(event, scheduledTime);
+            }
+        });
+
+        timeOffset += beatDuration;
+
+        if (timeOffset >= recordedSequence[recordedSequence.length -1 ].time + beatDuration ) {
+            clearInterval(playInterval);
+            console.log("Playback finished.");
+            isRecording = false;
+        }
+
+    }, beatDuration * 1000);
+}
+
+function scheduleNotePlayback(event, scheduledTime) {
+    const instrument = instrumentSounds[event.instrument];
+    const osc = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    osc.type = instrument.type;
+    osc.frequency.setValueAtTime(instrument.baseFrequency, scheduledTime);
+
+    gainNode.gain.setValueAtTime(volume, scheduledTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, scheduledTime + 0.1);
+
+    osc.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    osc.start(scheduledTime);
+    osc.stop(scheduledTime + 0.1);
+
+    if (event.noteType === 'matrix') {
+        if (matrixCells[event.index]) {
+            matrixCells[event.index].classList.add('active');
+            setTimeout(() => {
+                matrixCells[event.index].classList.remove('active');
+            }, 200);
+        }
+    } else if (event.noteType === 'midi') {
+         if (midiKeys[event.index]) {
+            midiKeys[event.index].classList.add('active');
+            setTimeout(() => {
+                midiKeys[event.index].classList.remove('active');
+            }, 200);
+        }
+    }
+}
+
+// -------------------- Preset Banks (Basic) --------------------
+function loadPreset(presetName) {
+    clearMatrix();
+    recordedSequence = [];
+    if (presetName === 'preset1') {
+        loadPatternPreset1();
+    } else if (presetName === 'preset2') {
+        loadPatternPreset2();
+    } else if (presetName === 'preset3') {
+        loadPatternPreset3();
+    }
+    console.log(`Preset "${presetName}" loaded.`);
+}
+
+function loadPatternPreset1() {
+    [0, 16, 32, 48, 64, 80, 96, 112].forEach(index => toggleMatrixCell(matrixCells[index]));
+    [8, 24, 40, 56, 72, 88, 104, 120].forEach(index => toggleMatrixCell(matrixCells[index]));
+}
+
+function loadPatternPreset2() {
+     [0, 32, 64, 96].forEach(index => toggleMatrixCell(matrixCells[index]));
+     [16, 48, 80, 112, 120].forEach(index => toggleMatrixCell(matrixCells[index]));
+}
+
+function loadPatternPreset3() {
+    [0, 7, 16, 23, 32, 39, 48, 55, 64, 71, 80, 87, 96, 103, 112, 119].forEach(index => toggleMatrixCell(matrixCells[index]));
+}
+
+// -------------------- Social Sharing (Placeholders) --------------------
+function shareToTwitter() { alert("Sharing to Twitter (Placeholder)"); }
+function shareToInstagram() { alert("Sharing to Instagram (Placeholder)"); }
+function shareToFacebook() { alert("Sharing to Facebook (Placeholder)"); }
+function shareToClipboard() { alert("Link copied to clipboard (Placeholder)"); }
+
+// -------------------- Project Save and Load --------------------
+
+const backendURL = 'http://localhost:5000';
+
+function saveProject() {
+    const projectName = prompt("Enter a name for your project:");
+    if (!projectName) {
+        alert("Project name cannot be empty.");
+        return;
+    }
+
+    const projectState = {
+        projectName: projectName,
+        instrument: selectedInstrument,
+        tempo: tempo,
+        volume: volume,
+        matrixPattern: getMatrixPattern(),
+        recordedSequence: recordedSequence
+    };
+
+    fetch(`${backendURL}/api/projects/save`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(projectState)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message === "Project saved successfully!") {
+            alert(`Project "${projectName}" saved successfully! Project ID: ${data.projectId}`);
+        } else {
+            alert(`Error saving project: ${data.message}`);
+        }
+    })
+    .catch(error => {
+        console.error("Error saving project:", error);
+        alert("Failed to save project. Check console for details.");
+    });
+}
+
+function loadProject() {
+    const projectId = prompt("Enter the Project ID to load:");
+    if (!projectId) {
+        alert("Project ID cannot be empty.");
+        return;
+    }
+
+    fetch(`${backendURL}/api/projects/load/${projectId}`)
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error("Project not found.");
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        }
+        return response.json();
+    })
+    .then(projectData => {
+        if (projectData) {
+            console.log("Project data loaded:", projectData);
+            alert(`Project "${projectData.projectName}" loaded successfully!`);
+            applyProjectData(projectData);
+        } else {
+            alert("Project data could not be loaded.");
+        }
+    })
+    .catch(error => {
+        console.error("Error loading project:", error);
+        alert("Failed to load project: ${error.message}`);
+    });
+}
+
+function getMatrixPattern() {
+    return matrixCells.map(cell => cell.classList.contains('active'));
+}
+
+function applyProjectData(projectData) {
+    if (projectData.instrument) {
+        selectInstrument(projectData.instrument);
+    }
+    if (projectData.tempo) {
+        tempoSlider.value = projectData.tempo;
+        tempo = projectData.tempo;
+    }
+    if (projectData.volume) {
+        volumeSlider.value = projectData.volume;
+        volume = projectData.volume;
+    }
+    if (projectData.matrixPattern) {
+        projectData.matrixPattern.forEach((isActive, index) => {
+            if (isActive) {
+                matrixCells[index].classList.add('active');
+            } else {
+                matrixCells[index].classList.remove('active');
+            }
+        });
+    }
+    if (projectData.recordedSequence) {
+        recordedSequence = projectData.recordedSequence;
+        console.log("Loaded recorded sequence:", recordedSequence);
+    }
+}
+
+// -------------------- AI Tune Generation (Placeholder Frontend Call) --------------------
+function callAIGenerateTune() {
+    const aiParameters = {
+        instrument: selectedInstrument,
+        tempo: tempo,
+        genre: "synthwave",
+        complexity: "medium"
+    };
+
+    fetch(`${backendURL}/api/generate-tune`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(aiParameters)
+    })
+    .then(response => response.json())
+    .then(aiTuneData => {
+        console.log("AI Tune Data Received:", aiTuneData);
+        alert("AI Tune Generation Response Received (See console). This is a placeholder.");
+    })
+    .catch(error => {
+        console.error("Error calling AI tune generation:", error);
+        alert("Failed to call AI tune generation. Check console.");
+    });
+}
+
+// -------------------- Visualization (Placeholder - Three.js setup) - Updated for mood link --------------------
+function initVisualizer() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, document.querySelector('.visualization-container').offsetWidth / document.querySelector('.visualization-container').offsetHeight, 0.1, 1000);
+
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('threeCanvas'), antialias: true });
+    renderer.setSize(document.querySelector('.visualization-container').offsetWidth, document.querySelector('.visualization-container').offsetHeight);
+
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ee00, wireframe: true });
+    cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+
+    camera.position.z = 5;
+
+    animate();
+    window.addEventListener('resize', onWindowResize, false);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
+
+    // Example: Pulse cube intensity with tempo - Visualizer mood link
+    const pulseSpeed = tempo / 120 * 0.02; // Adjust speed scaling factor
+    cube.scale.setScalar(1 + Math.sin(Date.now() * pulseSpeed) * 0.2); // Scale based on sine wave and tempo
+
+    renderer.render(scene, camera);
+}
+
+
+function animateCubeToPattern() {
+    if (!cube || !matrixCells) return;
+
+    const activeCellsCount = matrixCells.filter(cell => cell.classList.contains('active')).length;
+    const targetScale = 1 + (activeCellsCount * 0.05);
+
+    gsap.to(cube.scale, {
+        x: targetScale, y: targetScale, z: targetScale,
+        duration: 0.6,
+        ease: "power2.out"
+    });
+
+    const instrumentColors = [0xb0e0e6, 0xffb6c1, 0x90ee90, 0xffffb3];
+    const randomColor = new THREE.Color(instrumentColors[Math.floor(Math.random() * instrumentColors.length)]);
+
+    gsap.to(cube.material.color, {
+        r: randomColor.r, g: randomColor.g, b: randomColor.b,
+        duration: 0.8,
+        ease: "easeInOut"
+    });
+}
+
+
+// -------------------- Initialization --------------------
+document.addEventListener('DOMContentLoaded', () => {
+    createMatrix();
+    createMIDIKeyboard();
+    initVisualizer();
+    selectInstrument('piano');
+    updateUIForMood(); // Initial UI mood setup on load
+});
+</script>
+</body>
+</html>
